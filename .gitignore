@@ -2,3 +2,5 @@
 __pycache__
 *.tar
 data/VOCdevkit
+lightning_logs
+*.png
