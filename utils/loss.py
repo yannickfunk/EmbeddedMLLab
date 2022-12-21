@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 
+
 def iou(bboxes1, bboxes2):
     """ calculate iou between each bbox in `bboxes1` with each bbox in `bboxes2`"""
     px, py, pw, ph = bboxes1[...,:4].reshape(-1, 4).split(1, -1)
@@ -17,6 +18,7 @@ def iou(bboxes1, bboxes2):
     ious = (intersections/unions).reshape(*bboxes1.shape[:-1], *bboxes2.shape[:-1])
     
     return ious
+
 
 def iou_wh(bboxes1, bboxes2):
     """ calculate iou between each bbox in `bboxes1` with each bbox in `bboxes2`
@@ -35,6 +37,7 @@ def iou_wh(bboxes1, bboxes2):
     ious = (intersections / unions).reshape(*bboxes1.shape[:-1], *bboxes2.shape[:-1])
 
     return ious
+
 
 class YoloLoss(torch.nn.modules.loss._Loss):
 
