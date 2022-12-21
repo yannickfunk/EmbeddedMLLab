@@ -38,7 +38,7 @@ def precision_recall(ground_truth_boxes: List[torch.Tensor],
                 pred_idx_thr.append(ipb)
                 ious.append(box_iou)
 
-    args_desc = np.argsort(ious)[::-1]
+    args_desc = torch.argsort(torch.tensor(ious), descending=True)
     if len(args_desc) == 0:
         return 0, len(predicted_boxes), len(ground_truth_boxes)
     else:

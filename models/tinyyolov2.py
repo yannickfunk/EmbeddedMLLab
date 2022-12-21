@@ -4,17 +4,62 @@ import torch.nn.functional as F
 
 import pytorch_lightning as pl
 
+from utils.loss import YoloLoss
+from utils.ap import precision_recall_levels, ap, display_roc
+from utils.yolo import nms, filter_boxes
+
 
 class TinyYoloV2(pl.LightningModule):
-    def __init__(self, num_classes=20):
+    def __init__(self, anchors):
         super().__init__()
-        anchors = ((1.08, 1.19),
-            (3.42, 4.41),
-            (6.63, 11.38),
-            (9.42, 5.11),
-            (16.62, 10.52),)
+        self.loss = YoloLoss(anchors=anchors)
 
+    def training_step(self, batch, batch_idx):
+        inputs, targets = batch
+        outputs = self(inputs, yolo=False)
+        loss, _ = self.loss.forward(outputs, targets)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        inputs, targets = batch
+
+        outputs = self(inputs, yolo=False)
+        loss, _ = self.loss.forward(outputs, targets)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        # precision + recall computation
+        outputs = self(inputs, yolo=True)
+        outputs = filter_boxes(outputs, 0.0)
+        outputs = nms(outputs, 0.5)
+
+        precision, recall = precision_recall_levels(targets[0], outputs[0])
+
+    def configure_optimizers(self):
+        # We only train the last layer (conv9)
+        for key, param in self.named_parameters():
+            if any(x in key for x in ['1', '2', '3', '4', '5', '6', '7']):
+                param.requires_grad = False
+        return torch.optim.Adam([e for e in self.parameters() if e.requires_grad], lr=0.001)
+
+    def load_pt_from_disk(self, pt_file):
+        """
+        For loading the pretrained file provided by Kilian
+        """
+        sd = torch.load(pt_file)
+        self.load_state_dict({k: v for k, v in sd.items() if not '9' in k}, strict=False)
+
+
+class TinyYoloV2Original(TinyYoloV2):
+    def __init__(self, num_classes=20):
+        anchors = ((1.08, 1.19),
+                        (3.42, 4.41),
+                        (6.63, 11.38),
+                        (9.42, 5.11),
+                        (16.62, 10.52),)
+        super().__init__(anchors)
         self.register_buffer("anchors", torch.tensor(anchors))
+
         self.num_classes = num_classes
         self.pad = nn.ReflectionPad2d((0, 1, 0, 1))
 
