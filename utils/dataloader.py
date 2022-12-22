@@ -1,5 +1,4 @@
 import torch
-from torchinfo import summary
 
 import torchvision
 from torchvision import transforms as tf
