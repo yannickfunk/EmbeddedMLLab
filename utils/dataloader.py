@@ -100,24 +100,28 @@ class VOCTransform:
             return tf.functional.to_tensor(image), target_vectors
 
 
-def VOCDataLoader(train=True, batch_size=32, shuffle=False):
+def VOCDataLoader(train=True, batch_size=32,
+                  shuffle=False, data_path="data/",
+                  download=True):
     if train:
         image_set = "train"
     else:
         image_set = "val"
 
-    dataset = torchvision.datasets.VOCDetection("data/", year="2012", image_set=image_set, download=True,
+    dataset = torchvision.datasets.VOCDetection(data_path, year="2012", image_set=image_set, download=download,
                                                 transforms=VOCTransform(train=train))
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
 
-def VOCDataLoaderPerson(train=True, batch_size=32, shuffle=False):
+def VOCDataLoaderPerson(train=True, batch_size=32,
+                        shuffle=False, data_path="data/",
+                        download=True):
     if train:
         image_set = "train"
     else:
         image_set = "val"
     
-    dataset = torchvision.datasets.VOCDetection("data/", year="2012", image_set=image_set, download=True,
+    dataset = torchvision.datasets.VOCDetection(data_path, year="2012", image_set=image_set, download=download,
                                                 transforms=VOCTransform(train=train, only_person=True))
     indices = [i for i in range(len(dataset)) if torch.any(dataset[i][1][:,-1] == 0)]
     dataset = torch.utils.data.Subset(dataset, indices)
