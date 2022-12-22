@@ -1,3 +1,2 @@
 lightning==1.8.6
-torchvision==0.14.1
-torchinfo==1.7.1
+torchvision==0.14.0
