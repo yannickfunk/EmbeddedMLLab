@@ -4,3 +4,4 @@ __pycache__
 data/VOCdevkit
 lightning_logs
 *.png
+*.code-workspace
