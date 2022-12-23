@@ -2,6 +2,7 @@ import torch
 
 import torchvision
 from torchvision import transforms as tf
+import torch.utils.data as data_utils
 
 
 CLASSES = (
@@ -39,6 +40,26 @@ def num_to_class(number):
     return 'none'
 
 
+def image_transform(image, width=320, height=320):
+    img_width, img_height = image.size
+
+    scale = min(width / img_width, height / img_height)
+    new_width, new_height = int(img_width * scale), int(img_height * scale)
+
+    diff_width, diff_height = width - new_width, height - new_height
+    image = tf.functional.resize(image, size=(new_height, new_width))
+    image = tf.functional.pad(
+        image,
+        padding=(
+            diff_width // 2,
+            diff_height // 2,
+            diff_width // 2 + diff_width % 2,
+            diff_height // 2 + diff_height % 2
+        )
+    )
+    return image, diff_width, diff_height
+
+
 class VOCTransform:
     def __init__(self, train=True, only_person=False):
         self.only_person = only_person
@@ -48,24 +69,10 @@ class VOCTransform:
 
     def __call__(self, image, target):
         num_bboxes = 10
-        width, height = 320, 320
-
+        width = 320
+        height = 320
         img_width, img_height = image.size
-
-        scale = min(width / img_width, height / img_height)
-        new_width, new_height = int(img_width * scale), int( img_height * scale)
-
-        diff_width, diff_height = width - new_width, height - new_height
-        image = tf.functional.resize(image, size=(new_height, new_width))
-        image = tf.functional.pad(
-            image,
-            padding=(
-                diff_width//2,
-                diff_height//2,
-                diff_width//2 + diff_width % 2,
-                diff_height//2 + diff_height % 2
-            )
-        )
+        image, diff_width, diff_height = image_transform(image, width=width, height=height)
         target = target['annotation']['object']
 
         target_vectors = []
@@ -106,7 +113,7 @@ class VOCTransform:
 
 def VOCDataLoader(train=True, batch_size=32,
                   shuffle=False, data_path="data/",
-                  download=False):
+                  download=False, n_limit=None):
     if train:
         image_set = "train"
     else:
@@ -114,12 +121,15 @@ def VOCDataLoader(train=True, batch_size=32,
 
     dataset = torchvision.datasets.VOCDetection(data_path, year="2012", image_set=image_set, download=download,
                                                 transforms=VOCTransform(train=train))
+    if n_limit is not None:
+        indices = torch.arange(n_limit)
+        dataset = data_utils.Subset(dataset, indices)
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
 
 
 def VOCDataLoaderPerson(train=True, batch_size=32,
                         shuffle=False, data_path="data/",
-                        download=False):
+                        download=False, n_limit=None):
     if train:
         image_set = "train"
     else:
@@ -129,4 +139,7 @@ def VOCDataLoaderPerson(train=True, batch_size=32,
                                                 transforms=VOCTransform(train=train, only_person=True))
     indices = [i for i in range(len(dataset)) if torch.any(dataset[i][1][:, -1] == 0)]
     dataset = torch.utils.data.Subset(dataset, indices)
+    if n_limit is not None:
+        indices = torch.arange(n_limit)
+        dataset = data_utils.Subset(dataset, indices)
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
