@@ -114,7 +114,7 @@ def VOCDataLoader(train=True, batch_size=32,
 
     dataset = torchvision.datasets.VOCDetection(data_path, year="2012", image_set=image_set, download=download,
                                                 transforms=VOCTransform(train=train))
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=8)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
 
 
 def VOCDataLoaderPerson(train=True, batch_size=32,
@@ -129,4 +129,4 @@ def VOCDataLoaderPerson(train=True, batch_size=32,
                                                 transforms=VOCTransform(train=train, only_person=True))
     indices = [i for i in range(len(dataset)) if torch.any(dataset[i][1][:, -1] == 0)]
     dataset = torch.utils.data.Subset(dataset, indices)
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=8)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
