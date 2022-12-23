@@ -29,11 +29,14 @@ class TinyYoloV2(pl.LightningModule):
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
         # precision + recall computation
-        outputs = self(inputs, yolo=True)
-        outputs = filter_boxes(outputs, 0.0)
-        outputs = nms(outputs, 0.5)
+        # outputs = self(inputs, yolo=True)
+        # outputs = filter_boxes(outputs, 0.0)
+        # outputs = nms(outputs, 0.5)
+        # precision, recall = precision_recall_levels(targets[0], outputs[0])
 
-        precision, recall = precision_recall_levels(targets[0], outputs[0])
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        inputs, targets = batch
+        return self(inputs, yolo=True), inputs, targets
 
     def configure_optimizers(self):
         # We only train the last layer (conv9)
@@ -42,12 +45,14 @@ class TinyYoloV2(pl.LightningModule):
                 param.requires_grad = False
         return torch.optim.Adam([e for e in self.parameters() if e.requires_grad], lr=0.001)
 
-    def load_pt_from_disk(self, pt_file):
+    def load_pt_from_disk(self, pt_file, discard_last_layer=True):
         """
         For loading the pretrained file provided by Kilian
         """
         sd = torch.load(pt_file)
-        self.load_state_dict({k: v for k, v in sd.items() if not '9' in k}, strict=False)
+        if discard_last_layer:
+            sd = {k: v for k, v in sd.items() if not '9' in k}
+        self.load_state_dict(sd, strict=False)
 
 
 class TinyYoloV2Original(TinyYoloV2):
@@ -131,6 +136,7 @@ class TinyYoloV2Original(TinyYoloV2):
         x = F.leaky_relu(x, negative_slope=0.1, inplace=True)
 
         x = self.conv9(x)
+
         if yolo:
             nB, _, nH, nW = x.shape
 
