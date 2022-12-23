@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import pytorch_lightning as pl
+import lightning as pl
 
 from utils.loss import YoloLoss
 from utils.ap import precision_recall_levels, ap, display_roc
