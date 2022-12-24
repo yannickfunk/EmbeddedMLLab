@@ -5,8 +5,6 @@ import torch.nn.functional as F
 import lightning as pl
 
 from utils.loss import YoloLoss
-from utils.ap import precision_recall_levels, ap, display_roc
-from utils.yolo import nms, filter_boxes
 
 
 class TinyYoloV2(pl.LightningModule):
@@ -27,12 +25,6 @@ class TinyYoloV2(pl.LightningModule):
         outputs = self(inputs, yolo=False)
         loss, _ = self.loss.forward(outputs, targets)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-
-        # precision + recall computation
-        # outputs = self(inputs, yolo=True)
-        # outputs = filter_boxes(outputs, 0.0)
-        # outputs = nms(outputs, 0.5)
-        # precision, recall = precision_recall_levels(targets[0], outputs[0])
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         inputs, targets = batch

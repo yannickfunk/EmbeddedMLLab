@@ -5,3 +5,5 @@ data/VOCdevkit
 lightning_logs
 *.png
 *.code-workspace
+flagged
+*.mp4
