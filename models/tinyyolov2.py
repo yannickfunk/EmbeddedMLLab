@@ -159,3 +159,8 @@ class TinyYoloV2Original(TinyYoloV2):
             )
         
         return x
+
+
+class TinyYoloV2PersonOnly(TinyYoloV2Original):
+    def __init__(self):
+        super().__init__(num_classes=1)
