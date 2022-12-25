@@ -81,6 +81,7 @@ demo = gr.Interface(
         gr.Slider(label="Box Threshold", minimum=0, maximum=1, step=0.01, value=0.1)
     ],
     outputs="playable_video",
+    allow_flagging="never"
 )
 
 if __name__ == "__main__":
