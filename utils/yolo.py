@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List
-
+from utils.dataloader import class_to_num
 
 def iou(bboxes1, bboxes2):
     """ calculate iou between each bbox in `bboxes1` with each bbox in `bboxes2`"""
@@ -37,7 +37,7 @@ def nms(filtered_array: List[np.ndarray], threshold: float) -> List[np.ndarray]:
     return result
 
 
-def filter_boxes(output_array: np.ndarray, threshold) -> List[np.ndarray]:
+def filter_boxes(output_array: np.ndarray, threshold, person_only=False) -> List[np.ndarray]:
     b, a, h, w, c = output_array.shape    
     x = np.ascontiguousarray(output_array).reshape(b, a * h * w, c)
 
@@ -45,7 +45,12 @@ def filter_boxes(output_array: np.ndarray, threshold) -> List[np.ndarray]:
     confidence = x[:, :, 4]    
     scores = np.max(x[:, :, 5:], -1)
     idx = np.argmax(x[:, :, 5:], -1)
+
+    if person_only:
+        idx[...] = class_to_num("person")
+
     idx = idx.astype('float32')
+
     scores = scores * confidence
     mask = scores > threshold
 
