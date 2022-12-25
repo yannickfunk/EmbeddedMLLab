@@ -6,11 +6,19 @@ import lightning as pl
 
 from utils.loss import YoloLoss
 
+ANCHORS = (
+    (1.08, 1.19),
+    (3.42, 4.41),
+    (6.63, 11.38),
+    (9.42, 5.11),
+    (16.62, 10.52),
+)
+
 
 class TinyYoloV2(pl.LightningModule):
-    def __init__(self, anchors):
+    def __init__(self):
         super().__init__()
-        self.loss = YoloLoss(anchors=anchors)
+        self.loss = YoloLoss(anchors=ANCHORS)
 
     def training_step(self, batch, batch_idx):
         inputs, targets = batch
@@ -27,15 +35,18 @@ class TinyYoloV2(pl.LightningModule):
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        inputs, targets = batch
-        return self(inputs, yolo=True), inputs, targets
+        inputs, _ = batch
+        return self(inputs, yolo=True), inputs
 
     def configure_optimizers(self):
-        # We only train the last layer (conv9)
+        # We only train the last 2 layers (conv8 and conv9)
+        print("Freezing layers: ", end="")
         for key, param in self.named_parameters():
-            if any(x in key for x in ['1', '2', '3', '4', '5', '6', '7']):
+            if key.split(".")[0][-1] not in ["8", "9"]:
+                print(key+", ", end="")
                 param.requires_grad = False
-        return torch.optim.Adam([e for e in self.parameters() if e.requires_grad], lr=0.001)
+        print("")
+        return torch.optim.Adam(self.parameters(), lr=0.001)
 
     def load_pt_from_disk(self, pt_file, discard_last_layer=True):
         """
@@ -49,13 +60,8 @@ class TinyYoloV2(pl.LightningModule):
 
 class TinyYoloV2Original(TinyYoloV2):
     def __init__(self, num_classes=20):
-        anchors = ((1.08, 1.19),
-                        (3.42, 4.41),
-                        (6.63, 11.38),
-                        (9.42, 5.11),
-                        (16.62, 10.52),)
-        super().__init__(anchors)
-        self.register_buffer("anchors", torch.tensor(anchors))
+        super().__init__()
+        self.register_buffer("anchors", torch.tensor(ANCHORS))
 
         self.num_classes = num_classes
         self.pad = nn.ReflectionPad2d((0, 1, 0, 1))
@@ -84,7 +90,7 @@ class TinyYoloV2Original(TinyYoloV2):
         self.conv8 = nn.Conv2d(1024, 1024, 3, 1, 1, bias=False)
         self.bn8 = nn.BatchNorm2d(1024)
 
-        self.conv9 = nn.Conv2d(1024, len(anchors) * (5 + num_classes), 1, 1, 0)
+        self.conv9 = nn.Conv2d(1024, len(ANCHORS) * (5 + num_classes), 1, 1, 0)
 
     def forward(self, x, yolo=True):
 
@@ -141,12 +147,15 @@ class TinyYoloV2Original(TinyYoloV2):
             )
             anchor_x, anchor_y = anchors[:, 0], anchors[:, 1]
 
-            x = torch.cat([
-                (x[:, :, :, :, 0:1].sigmoid() + range_x[None, None, :, :, None]) / nW, #x center
-                (x[:, :, :, :, 1:2].sigmoid() + range_y[None, None, :, :, None]) / nH, #y center
-                (x[:, :, :, :, 2:3].exp() * anchor_x[None, :, None, None, None])/ nW, # Width
-                (x[:, :, :, :, 3:4].exp() * anchor_y[None, :, None, None, None]) /nH, # Height
-                x[:, :, :, :, 4:5].sigmoid(), #confidence
-                x[:, :, :, :, 5:].softmax(-1),], -1)
+            x_center = (x[..., 0:1].sigmoid() + range_x[None, None, :, :, None]) / nW
+            y_center = (x[..., 1:2].sigmoid() + range_y[None, None, :, :, None]) / nH
+            width = (x[..., 2:3].exp() * anchor_x[None, :, None, None, None]) / nW
+            height = (x[..., 3:4].exp() * anchor_y[None, :, None, None, None]) / nH
+            confidence = x[..., 4:5].sigmoid()
+            class_confidences = x[..., 5:].softmax(-1)
+            x = torch.cat(
+                [x_center, y_center, width, height, confidence, class_confidences],
+                -1
+            )
         
         return x
