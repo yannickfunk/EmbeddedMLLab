@@ -104,7 +104,7 @@ def get_result(image: np.ndarray, output: List[np.ndarray], overwrite_class_idx=
 
 def plot_predictions(predictions, image,
                      box_threshold=0.1, nms_threshold=0.25,
-                     return_array=False, person_only=False):
+                     return_array=False):
     if isinstance(predictions, torch.Tensor):
         predictions = predictions.numpy()
     if isinstance(image, torch.Tensor):
@@ -120,7 +120,7 @@ def plot_predictions(predictions, image,
     if len(predictions.shape) == 4:
         predictions = np.expand_dims(predictions, axis=0)
 
-    predictions = filter_boxes(predictions, box_threshold, person_only=person_only)
+    predictions = filter_boxes(predictions, box_threshold)
     # filter boxes based on overlap
     predictions = nms(predictions, nms_threshold)
     if return_array:
