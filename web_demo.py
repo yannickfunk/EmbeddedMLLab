@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import cv2
 import onnxruntime as ort
 from utils.viz import plot_predictions
@@ -33,6 +34,7 @@ def get_video_frames(gr_video):
 def get_predictions_images(images, model_file, nms_threshold, box_threshold):
     ort_sess = ort.InferenceSession('data/'+model_file)
     prediction_images = []
+    start = time.time_ns()
     for image in images:
         image = Image.fromarray(image)
         image = image_transform(image)[0]
@@ -44,7 +46,9 @@ def get_predictions_images(images, model_file, nms_threshold, box_threshold):
                              return_array=True,
                              nms_threshold=nms_threshold, box_threshold=box_threshold)
         )
-    return prediction_images
+    end = time.time_ns()
+    ms_per_frame = ((end - start) / len(images)) / 1000000
+    return prediction_images, ms_per_frame
 
 
 def get_video_file_from_prediction_images(prediction_images, fps):
@@ -67,9 +71,9 @@ def get_video_file_from_prediction_images(prediction_images, fps):
 
 def predict(gr_video, model_file, nms_threshold, box_threshold):
     images, fps = get_video_frames(gr_video)
-    prediction_images = get_predictions_images(images, model_file, nms_threshold, box_threshold)
+    prediction_images, ms_per_frame = get_predictions_images(images, model_file, nms_threshold, box_threshold)
     video_file = get_video_file_from_prediction_images(prediction_images, fps)
-    return video_file
+    return video_file, ms_per_frame
 
 
 demo = gr.Interface(
@@ -80,7 +84,7 @@ demo = gr.Interface(
         gr.Slider(label="NMS Threshold", minimum=0, maximum=1, step=0.01, value=0.25),
         gr.Slider(label="Box Threshold", minimum=0, maximum=1, step=0.01, value=0.1)
     ],
-    outputs="playable_video",
+    outputs=["playable_video", gr.Number(label="milliseconds per frame", precision=2)],
     allow_flagging="never"
 )
 
