@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import lightning as pl
+import pytorch_lightning as pl
 
 from utils.loss import YoloLoss
 
@@ -16,52 +16,10 @@ ANCHORS = (
 
 
 class TinyYoloV2(pl.LightningModule):
-    def __init__(self):
-        super().__init__()
-        self.loss = YoloLoss(anchors=ANCHORS)
-
-    def training_step(self, batch, batch_idx):
-        inputs, targets = batch
-        outputs = self(inputs, yolo=False)
-        loss, _ = self.loss.forward(outputs, targets)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        inputs, targets = batch
-
-        outputs = self(inputs, yolo=False)
-        loss, _ = self.loss.forward(outputs, targets)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        inputs, _ = batch
-        return self(inputs, yolo=True), inputs
-
-    def configure_optimizers(self):
-        # We only train the last 2 layers (conv8 and conv9)
-        print("Freezing layers: ", end="")
-        for key, param in self.named_parameters():
-            if key.split(".")[0][-1] not in ["8", "9"]:
-                print(key+", ", end="")
-                param.requires_grad = False
-        print("")
-        return torch.optim.Adam(self.parameters(), lr=0.001)
-
-    def load_pt_from_disk(self, pt_file, discard_last_layer=True):
-        """
-        For loading the pretrained file provided by Kilian
-        """
-        sd = torch.load(pt_file)
-        if discard_last_layer:
-            sd = {k: v for k, v in sd.items() if not '9' in k}
-        self.load_state_dict(sd, strict=False)
-
-
-class TinyYoloV2Original(TinyYoloV2):
     def __init__(self, num_classes=20):
         super().__init__()
         self.register_buffer("anchors", torch.tensor(ANCHORS))
+        self.loss = YoloLoss(anchors=ANCHORS)
 
         self.num_classes = num_classes
         self.pad = nn.ReflectionPad2d((0, 1, 0, 1))
@@ -159,3 +117,45 @@ class TinyYoloV2Original(TinyYoloV2):
             )
         
         return x
+
+    def training_step(self, batch, batch_idx):
+        inputs, targets = batch
+        outputs = self(inputs, yolo=False)
+        loss, _ = self.loss.forward(outputs, targets)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        inputs, targets = batch
+
+        outputs = self(inputs, yolo=False)
+        loss, _ = self.loss.forward(outputs, targets)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        inputs, _ = batch
+        return self(inputs, yolo=True), inputs
+
+    def configure_optimizers(self):
+        # We only train the last 2 layers (conv8 and conv9)
+        print("Freezing layers: ", end="")
+        for key, param in self.named_parameters():
+            if key.split(".")[0][-1] not in ["8", "9"]:
+                print(key+", ", end="")
+                param.requires_grad = False
+        print("")
+        return torch.optim.Adam(self.parameters(), lr=0.001)
+
+    def load_pt_from_disk(self, pt_file, discard_last_layer=True):
+        """
+        For loading the pretrained file provided by Kilian
+        """
+        sd = torch.load(pt_file)
+        if discard_last_layer:
+            sd = {k: v for k, v in sd.items() if not '9' in k}
+        self.load_state_dict(sd, strict=False)
+
+
+class TinyYoloV2PersonOnly(TinyYoloV2):
+    def __init__(self):
+        super().__init__(num_classes=1)
