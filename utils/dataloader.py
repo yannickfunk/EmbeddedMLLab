@@ -4,6 +4,8 @@ import torchvision
 from torchvision import transforms as tf
 import torch.utils.data as data_utils
 
+import pytorch_lightning as pl
+
 
 CLASSES = (
     "aeroplane",
@@ -143,3 +145,34 @@ def VOCDataLoaderPerson(train=True, batch_size=32,
         indices = torch.arange(n_limit)
         dataset = data_utils.Subset(dataset, indices)
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
+
+
+class VOCDataModule(pl.LightningDataModule):
+    def __init__(self, batch_size=128, person_only=False) -> None:
+        super().__init__()
+
+        self.batch_size = batch_size
+        self.person_only = person_only
+
+    def train_dataloader(self):
+        if self.person_only == True:
+            return VOCDataLoaderPerson(train=True, batch_size=self.batch_size, shuffle=True)
+        else:
+            return VOCDataLoader(train=True, batch_size=self.batch_size, shuffle=True)
+
+    def val_dataloader(self):
+        if self.person_only == True:
+            return VOCDataLoaderPerson(train=False, batch_size=self.batch_size, shuffle=True)
+        else:
+            return VOCDataLoader(train=False, batch_size=self.batch_size, shuffle=True)
+    
+    def test_dataloader(self):
+        if self.person_only == True:
+            return VOCDataLoaderPerson(train=False, batch_size=1)
+        else:
+            return VOCDataLoader(train=False, batch_size=1)
+
+
+class VOCPersonOnlyDataModule(VOCDataModule):
+    def __init__(self, batch_size=32) -> None:
+        super().__init__(batch_size, person_only=True)
