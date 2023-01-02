@@ -4,7 +4,11 @@ import torch.nn.functional as F
 
 import pytorch_lightning as pl
 
+import numpy as np
+
 from utils.loss import YoloLoss
+from utils.yolo import nms, filter_boxes
+from utils.ap import precision_recall_levels, ap, display_roc
 
 ANCHORS = (
     (1.08, 1.19),
@@ -100,8 +104,7 @@ class TinyYoloV2(pl.LightningModule):
 
             anchors = self.anchors.to(dtype=x.dtype, device=x.device)
             range_y, range_x, = torch.meshgrid(
-                    torch.arange(nH, dtype=x.dtype, device=x.device),
-                    torch.arange(nW, dtype=x.dtype, device=x.device)
+                torch.arange(nH, dtype=x.dtype, device=x.device), torch.arange(nW, dtype=x.dtype, device=x.device)
             )
             anchor_x, anchor_y = anchors[:, 0], anchors[:, 1]
 
@@ -111,11 +114,8 @@ class TinyYoloV2(pl.LightningModule):
             height = (x[..., 3:4].exp() * anchor_y[None, :, None, None, None]) / nH
             confidence = x[..., 4:5].sigmoid()
             class_confidences = x[..., 5:].softmax(-1)
-            x = torch.cat(
-                [x_center, y_center, width, height, confidence, class_confidences],
-                -1
-            )
-        
+            x = torch.cat([x_center, y_center, width, height, confidence, class_confidences], -1)
+
         return x
 
     def training_step(self, batch, batch_idx):
@@ -123,39 +123,56 @@ class TinyYoloV2(pl.LightningModule):
         outputs = self(inputs, yolo=False)
         loss, _ = self.loss.forward(outputs, targets)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
         inputs, targets = batch
-
         outputs = self(inputs, yolo=False)
         loss, _ = self.loss.forward(outputs, targets)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         inputs, _ = batch
+
         return self(inputs, yolo=True), inputs
+
+    def test_step(self, batch, batch_idx, dataloader_idx=0) -> Optional[STEP_OUTPUT]:
+        inputs, targets = batch
+        outputs = self(inputs, yolo=True)
+        outputs = filter_boxes(outputs, 0.0)
+        outputs = nms(outputs, 0.5)
+        outputs = torch.tensor(np.array(outputs))
+
+        precision, recall = precision_recall_levels(targets[0], outputs[0])
+
+        self.log("precision", precision)
+        self.log("recall", recall)
 
     def configure_optimizers(self):
         # We only train the last 2 layers (conv8 and conv9)
-        print("Freezing layers: ", end="")
         for key, param in self.named_parameters():
             if key.split(".")[0][-1] not in ["8", "9"]:
-                print(key+", ", end="")
                 param.requires_grad = False
-        print("")
+                
         return torch.optim.Adam(self.parameters(), lr=0.001)
 
-    def load_pt_from_disk(self, pt_file, discard_last_layer=True):
+    def load_pt_from_disk(self, pt_file):
         """
         For loading the pretrained file provided by Kilian
         """
         sd = torch.load(pt_file)
-        if discard_last_layer:
-            sd = {k: v for k, v in sd.items() if not '9' in k}
         self.load_state_dict(sd, strict=False)
 
 
 class TinyYoloV2PersonOnly(TinyYoloV2):
     def __init__(self):
         super().__init__(num_classes=1)
+
+    def load_pt_from_disk(self, pt_file):
+        """
+        For loading the pretrained file provided by Kilian
+        """
+        sd = torch.load(pt_file)
+        sd = {k: v for k, v in sd.items() if not "9" in k}
+        self.load_state_dict(sd, strict=False)
