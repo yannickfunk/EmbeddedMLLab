@@ -162,9 +162,9 @@ class VOCDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         if self.person_only == True:
-            return VOCDataLoaderPerson(train=False, batch_size=self.batch_size, shuffle=True)
+            return VOCDataLoaderPerson(train=False, batch_size=self.batch_size, shuffle=False)
         else:
-            return VOCDataLoader(train=False, batch_size=self.batch_size, shuffle=True)
+            return VOCDataLoader(train=False, batch_size=self.batch_size, shuffle=False)
     
     def test_dataloader(self):
         if self.person_only == True:
