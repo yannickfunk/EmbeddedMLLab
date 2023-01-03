@@ -2,13 +2,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import pytorch_lightning as pl
+import lightning as pl
 
 import numpy as np
 
 from utils.loss import YoloLoss
 from utils.yolo import nms, filter_boxes
 from utils.ap import precision_recall_levels, ap, display_roc
+
+from typing import Optional, Union, Dict, Any
+from torch import Tensor
+
+STEP_OUTPUT = Union[Tensor, Dict[str, Any], None]
 
 ANCHORS = (
     (1.08, 1.19),
@@ -154,7 +159,7 @@ class TinyYoloV2(pl.LightningModule):
         for key, param in self.named_parameters():
             if key.split(".")[0][-1] not in ["8", "9"]:
                 param.requires_grad = False
-                
+
         return torch.optim.Adam(self.parameters(), lr=0.001)
 
     def load_pt_from_disk(self, pt_file):

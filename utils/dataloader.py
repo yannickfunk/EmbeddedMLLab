@@ -4,7 +4,7 @@ import torchvision
 from torchvision import transforms as tf
 import torch.utils.data as data_utils
 
-import pytorch_lightning as pl
+import lightning as pl
 
 
 CLASSES = (
