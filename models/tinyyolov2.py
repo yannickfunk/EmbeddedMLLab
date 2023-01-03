@@ -173,6 +173,9 @@ class TinyYoloV2(pl.LightningModule):
     # def on_train_start(self) -> None:
     #     self.logger.log_hyperparams()
 
+    # def on_train_start(self) -> None:
+    #     self.logger.log_hyperparams()
+
     def load_pt_from_disk(self, pt_file):
         """
         For loading the pretrained file provided by Kilian
