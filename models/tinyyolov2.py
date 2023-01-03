@@ -127,7 +127,7 @@ class TinyYoloV2(pl.LightningModule):
         inputs, targets = batch
         outputs = self(inputs, yolo=False)
         loss, _ = self.loss.forward(outputs, targets)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log("train_loss", loss)
 
         return loss
 
@@ -135,7 +135,7 @@ class TinyYoloV2(pl.LightningModule):
         inputs, targets = batch
         outputs = self(inputs, yolo=False)
         loss, _ = self.loss.forward(outputs, targets)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         inputs, _ = batch
@@ -156,11 +156,10 @@ class TinyYoloV2(pl.LightningModule):
 
     def configure_optimizers(self):
         # We only train the last 2 layers (conv8 and conv9)
-        for key, param in self.named_parameters():
-            if key.split(".")[0][-1] not in ["8", "9"]:
-                param.requires_grad = False
-
         return torch.optim.Adam(self.parameters(), lr=0.001)
+
+    # def on_train_start(self) -> None:
+    #     self.logger.log_hyperparams()
 
     def load_pt_from_disk(self, pt_file):
         """
@@ -173,6 +172,10 @@ class TinyYoloV2(pl.LightningModule):
 class TinyYoloV2PersonOnly(TinyYoloV2):
     def __init__(self):
         super().__init__(num_classes=1)
+
+        for key, param in self.named_parameters():
+            if key.split(".")[0][-1] not in ["8", "9"]:
+                param.requires_grad = False
 
     def load_pt_from_disk(self, pt_file):
         """
