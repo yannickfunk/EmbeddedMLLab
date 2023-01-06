@@ -6,6 +6,8 @@ import torch.utils.data as data_utils
 
 import lightning as pl
 
+import os
+
 
 CLASSES = (
     "aeroplane",
@@ -126,7 +128,7 @@ def VOCDataLoader(train=True, batch_size=32,
     if n_limit is not None:
         indices = torch.arange(n_limit)
         dataset = data_utils.Subset(dataset, indices)
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=os.cpu_count())
 
 
 def VOCDataLoaderPerson(train=True, batch_size=32,
@@ -144,7 +146,7 @@ def VOCDataLoaderPerson(train=True, batch_size=32,
     if n_limit is not None:
         indices = torch.arange(n_limit)
         dataset = data_utils.Subset(dataset, indices)
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=2)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=os.cpu_count())
 
 
 class VOCDataModule(pl.LightningDataModule):
