@@ -13,6 +13,9 @@ from utils.ap import precision_recall_levels, ap, display_roc
 from typing import Optional, Union, Dict, Any
 from torch import Tensor
 
+import nni
+from nni.algorithms.compression.v2.pytorch import LightningEvaluator
+
 STEP_OUTPUT = Union[Tensor, Dict[str, Any], None]
 
 ANCHORS = (
@@ -25,12 +28,15 @@ ANCHORS = (
 
 
 class TinyYoloV2(pl.LightningModule):
-    def __init__(self, num_classes=20):
+    def __init__(self, num_classes: int =20, learning_rate: int = 0.001):
         super().__init__()
         self.register_buffer("anchors", torch.tensor(ANCHORS))
-        self.loss = YoloLoss(anchors=ANCHORS)
 
         self.num_classes = num_classes
+        self.learning_rate = learning_rate
+
+        self.loss = YoloLoss(anchors=ANCHORS)
+
         self.pad = nn.ReflectionPad2d((0, 1, 0, 1))
 
         self.conv1 = nn.Conv2d(3, 16, 3, 1, 1, bias=False)
@@ -154,9 +160,15 @@ class TinyYoloV2(pl.LightningModule):
         self.log("precision", precision)
         self.log("recall", recall)
 
-    def configure_optimizers(self):
-        # We only train the last 2 layers (conv8 and conv9)
-        return torch.optim.Adam(self.parameters(), lr=0.001)
+    def configure_optimizers(self) -> Any:
+        optimizer = nni.trace(torch.optim.AdamW)(self.parameters(), lr=self.learning_rate, weight_decay=5e-4)
+        scheduler = {
+            "scheduler": nni.trace(torch.optim.lr_scheduler.OneCycleLR)(optimizer=optimizer, max_lr=self.learning_rate, total_steps=self.trainer.estimated_stepping_batches),
+            "interval": "step",
+            "name": "LR"
+        }
+
+        return [optimizer]
 
     # def on_train_start(self) -> None:
     #     self.logger.log_hyperparams()
@@ -168,11 +180,15 @@ class TinyYoloV2(pl.LightningModule):
         sd = torch.load(pt_file)
         self.load_state_dict(sd, strict=False)
 
+    def on_fit_end(self) -> None:
+        self.logger.finalize("success")
+
 
 class TinyYoloV2PersonOnly(TinyYoloV2):
     def __init__(self):
         super().__init__(num_classes=1)
 
+        # We only train the last 2 layers (conv8 and conv9)
         for key, param in self.named_parameters():
             if key.split(".")[0][-1] not in ["8", "9"]:
                 param.requires_grad = False
