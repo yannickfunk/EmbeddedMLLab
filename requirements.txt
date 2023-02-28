@@ -1,4 +1,4 @@
-lightning==1.8.6
+pytorch-lightning==1.8.6
 torchvision==0.14.0
 onnxruntime==1.13.1
 gradio==3.15.0
