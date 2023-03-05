@@ -79,17 +79,21 @@ class VOCTransform:
         image, diff_width, diff_height = image_transform(image, width=width, height=height)
         target = target['annotation']['object']
 
-        target_vectors = []
+        target_vectors = []            
+        image_width_diff_width = img_width + diff_width
+        image_height_diff_height = img_height + diff_height
+        
         for item in target:
             x0 = int(item['bndbox']['xmin'])
             x1 = int(item['bndbox']['xmax'])
             y0 = int(item['bndbox']['ymin'])
             y1 = int(item['bndbox']['ymax'])
 
-            target_vector = [(diff_width/2 + (x0 + x1)/2) / (img_width + diff_width),
-                    (diff_height/2 + (y0 + y1)/2) / (img_height + diff_height),
-                    (max(x0, x1) - min(x0, x1)) / (img_width + diff_width),
-                    (max(y0, y1) - min(y0, y1)) / (img_height + diff_height),
+
+            target_vector = [(diff_width/2 + (x0 + x1)/2) / image_width_diff_width,
+                    (diff_height/2 + (y0 + y1)/2) / image_height_diff_height,
+                    (max(x0, x1) - min(x0, x1)) / (image_width_diff_width),
+                    (max(y0, y1) - min(y0, y1)) / (image_height_diff_height),
                     1.0,
                     class_to_num(item['name'])]
 
@@ -99,6 +103,7 @@ class VOCTransform:
                     target_vectors.append(target_vector)
             else:
                 target_vectors.append(target_vector)
+
 
         target_vectors = list(sorted(target_vectors, key=lambda x: x[2]*x[3]))
         target_vectors = torch.tensor(target_vectors)
@@ -176,5 +181,7 @@ class VOCDataModule(pl.LightningDataModule):
 
 
 class VOCPersonOnlyDataModule(VOCDataModule):
-    def __init__(self, batch_size=32) -> None:
+    def __init__(self, batch_size=128) -> None:
         super().__init__(batch_size, person_only=True)
+
+
