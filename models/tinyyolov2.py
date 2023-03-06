@@ -1,22 +1,22 @@
+from typing import Any, Dict, List, Optional, Union
+
+import nni
+import numpy as np
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import pytorch_lightning as pl
-
-import numpy as np
-
-from utils.loss import YoloLoss
-from utils.yolo import nms, filter_boxes
-from utils.ap import precision_recall_levels, ap, display_roc
-
-from typing import Optional, Union, Dict, Any
-from torch import Tensor
-
-import nni
 from nni.algorithms.compression.v2.pytorch import LightningEvaluator
+from torch import Tensor
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from torchvision.transforms.functional import to_pil_image
+
+from utils.ap import ap, display_roc, precision_recall_levels
+from utils.loss import YoloLoss
+from utils.yolo import filter_boxes, nms
 
 STEP_OUTPUT = Union[Tensor, Dict[str, Any], None]
+EPOCH_OUTPUT = Union[List[Union[Tensor, Dict[str, Any]]], List[List[Union[Tensor, Dict[str, Any]]]]]
 
 ANCHORS = (
     (1.08, 1.19),
@@ -28,12 +28,16 @@ ANCHORS = (
 
 
 class TinyYoloV2(pl.LightningModule):
-    def __init__(self, num_classes: int =20, learning_rate: int = 0.001):
+    def __init__(self, num_classes: int = 20, learning_rate: int = 0.001):
         super().__init__()
         self.register_buffer("anchors", torch.tensor(ANCHORS))
 
         self.num_classes = num_classes
         self.learning_rate = learning_rate
+
+        self.example_input_array= torch.rand(3,320,320)
+
+        self.save_hyperparameters()
 
         self.loss = YoloLoss(anchors=ANCHORS)
 
@@ -65,7 +69,7 @@ class TinyYoloV2(pl.LightningModule):
 
         self.conv9 = nn.Conv2d(1024, len(ANCHORS) * (5 + num_classes), 1, 1, 0)
 
-    def forward(self, x, yolo=True):
+    def forward(self, x, yolo=False):
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -109,24 +113,28 @@ class TinyYoloV2(pl.LightningModule):
         x = self.conv9(x)
 
         if yolo:
-            nB, _, nH, nW = x.shape
+            x = self.convert_to_box_representation(x)
 
-            x = x.view(nB, self.anchors.shape[0], -1, nH, nW).permute(0, 1, 3, 4, 2)
+        return x
 
-            anchors = self.anchors.to(dtype=x.dtype, device=x.device)
-            range_y, range_x, = torch.meshgrid(
+    def convert_to_box_representation(self, x):
+        nB, _, nH, nW = x.shape
+
+        x = x.view(nB, self.anchors.shape[0], -1, nH, nW).permute(0, 1, 3, 4, 2)
+
+        anchors = self.anchors.to(dtype=x.dtype, device=x.device)
+        range_y, range_x, = torch.meshgrid(
                 torch.arange(nH, dtype=x.dtype, device=x.device), torch.arange(nW, dtype=x.dtype, device=x.device)
             )
-            anchor_x, anchor_y = anchors[:, 0], anchors[:, 1]
+        anchor_x, anchor_y = anchors[:, 0], anchors[:, 1]
 
-            x_center = (x[..., 0:1].sigmoid() + range_x[None, None, :, :, None]) / nW
-            y_center = (x[..., 1:2].sigmoid() + range_y[None, None, :, :, None]) / nH
-            width = (x[..., 2:3].exp() * anchor_x[None, :, None, None, None]) / nW
-            height = (x[..., 3:4].exp() * anchor_y[None, :, None, None, None]) / nH
-            confidence = x[..., 4:5].sigmoid()
-            class_confidences = x[..., 5:].softmax(-1)
-            x = torch.cat([x_center, y_center, width, height, confidence, class_confidences], -1)
-
+        x_center = (x[..., 0:1].sigmoid() + range_x[None, None, :, :, None]) / nW
+        y_center = (x[..., 1:2].sigmoid() + range_y[None, None, :, :, None]) / nH
+        width = (x[..., 2:3].exp() * anchor_x[None, :, None, None, None]) / nW
+        height = (x[..., 3:4].exp() * anchor_y[None, :, None, None, None]) / nH
+        confidence = x[..., 4:5].sigmoid()
+        class_confidences = x[..., 5:].softmax(-1)
+        x = torch.cat([x_center, y_center, width, height, confidence, class_confidences], -1)
         return x
 
     def training_step(self, batch, batch_idx):
@@ -142,33 +150,44 @@ class TinyYoloV2(pl.LightningModule):
         outputs = self(inputs, yolo=False)
         loss, _ = self.loss.forward(outputs, targets)
         self.log("val_loss", loss)
+        box_representation = self.convert_to_box_representation(x=outputs)
+
+        return {'box_representation': box_representation, 'targets': targets}
+
+    def validation_epoch_end(self, outputs: Union[EPOCH_OUTPUT, List[EPOCH_OUTPUT]]) -> None:
+        all_box_representation = torch.cat([x['box_representation'] for x in outputs])
+        all_targets = torch.cat([x['targets'] for x in outputs])
+
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         inputs, _ = batch
+        outputs = self(inputs)
+        box_representation = self.convert_to_box_representation(outputs)
 
-        return self(inputs, yolo=True), inputs
+        return box_representation, inputs
 
     def test_step(self, batch, batch_idx, dataloader_idx=0) -> Optional[STEP_OUTPUT]:
         inputs, targets = batch
-        outputs = self(inputs, yolo=True)
-        outputs = filter_boxes(outputs, 0.0)
-        outputs = nms(outputs, 0.5)
-        outputs = torch.tensor(np.array(outputs))
+        outputs = self(inputs)
+        box_representation = self.convert_to_box_representation(outputs)
+        box_representation = filter_boxes(box_representation, 0.0)
+        box_representation = nms(box_representation, 0.5)
+        box_representation = torch.tensor(np.array(box_representation))
 
-        precision, recall = precision_recall_levels(targets[0], outputs[0])
+        precision, recall = precision_recall_levels(targets[0], box_representation[0])
 
         self.log("precision", precision)
         self.log("recall", recall)
 
     def configure_optimizers(self) -> Any:
-        optimizer = nni.trace(torch.optim.AdamW)(self.parameters(), lr=self.learning_rate, weight_decay=5e-4)
+        optimizer = nni.trace(torch.optim.AdamW)(self.parameters(), lr=self.learning_rate, weight_decay=1e-4)
         scheduler = {
             "scheduler": nni.trace(torch.optim.lr_scheduler.OneCycleLR)(optimizer=optimizer, max_lr=self.learning_rate, total_steps=self.trainer.estimated_stepping_batches),
             "interval": "step",
             "name": "LR"
         }
 
-        return [optimizer]
+        return [optimizer], [scheduler]
 
     # def on_train_start(self) -> None:
     #     self.logger.log_hyperparams()
@@ -188,18 +207,20 @@ class TinyYoloV2(pl.LightningModule):
 
 
 class TinyYoloV2PersonOnly(TinyYoloV2):
-    def __init__(self):
-        super().__init__(num_classes=1)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, num_classes=1)
 
         # We only train the last 2 layers (conv8 and conv9)
         for key, param in self.named_parameters():
             if key.split(".")[0][-1] not in ["8", "9"]:
                 param.requires_grad = False
 
-    def load_pt_from_disk(self, pt_file):
+    def load_pt_from_disk(self, pt_file, discard_layer_8:bool = True):
         """
         For loading the pretrained file provided by Kilian
         """
         sd = torch.load(pt_file)
-        sd = {k: v for k, v in sd.items() if not "9" in k}
+        sd = {k: v for k, v in sd.items() if not "9" in k in k}
+        if discard_layer_8:
+            sd = {k: v for k, v in sd.items() if not "8" in k}
         self.load_state_dict(sd, strict=False)

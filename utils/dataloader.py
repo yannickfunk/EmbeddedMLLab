@@ -122,7 +122,7 @@ class VOCTransform:
 
 def VOCDataLoader(train=True, batch_size=32,
                   shuffle=False, data_path="data/",
-                  download=False, n_limit=None):
+                  download=True, n_limit=None):
     if train:
         image_set = "train"
     else:
@@ -138,7 +138,7 @@ def VOCDataLoader(train=True, batch_size=32,
 
 def VOCDataLoaderPerson(train=True, batch_size=32,
                         shuffle=False, data_path="data/",
-                        download=False, n_limit=None):
+                        download=True, n_limit=None):
     if train:
         image_set = "train"
     else:
@@ -182,6 +182,6 @@ class VOCDataModule(pl.LightningDataModule):
 
 class VOCPersonOnlyDataModule(VOCDataModule):
     def __init__(self, batch_size=128) -> None:
-        super().__init__(batch_size, person_only=True)
+        super().__init__(batch_size=batch_size, person_only=True)
 
 
