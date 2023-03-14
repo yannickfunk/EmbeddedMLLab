@@ -31,8 +31,11 @@ def get_video_frames(gr_video):
     return images, fps
 
 
-def get_predictions_images(images, model_file, nms_threshold, box_threshold):
-    ort_sess = ort.InferenceSession('data/'+model_file)
+def get_predictions_images(images, model_file, nms_threshold, box_threshold, enable_opt):
+    sess_options = ort.SessionOptions()
+    if enable_opt:
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    ort_sess = ort.InferenceSession('data/'+model_file, sess_options=sess_options)
     prediction_images = []
     person_only = model_file == "person_only.onnx"
     start = time.time_ns()
@@ -70,9 +73,10 @@ def get_video_file_from_prediction_images(prediction_images, fps):
     return video_file.name
 
 
-def predict(gr_video, model_file, nms_threshold, box_threshold):
+def predict(gr_video, model_file, nms_threshold, box_threshold, enable_opt):
     images, fps = get_video_frames(gr_video)
-    prediction_images, ms_per_frame = get_predictions_images(images, model_file, nms_threshold, box_threshold)
+    prediction_images, ms_per_frame = get_predictions_images(images, model_file,
+                                                             nms_threshold, box_threshold, enable_opt)
     video_file = get_video_file_from_prediction_images(prediction_images, fps)
     return video_file, ms_per_frame
 
@@ -83,7 +87,8 @@ demo = gr.Interface(
         gr.Video(source="webcam", format="mp4"),
         gr.Dropdown(choices=available_models, label="Model File", value="pretrained.onnx"),
         gr.Slider(label="NMS Threshold", minimum=0, maximum=1, step=0.01, value=0.25),
-        gr.Slider(label="Box Threshold", minimum=0, maximum=1, step=0.01, value=0.1)
+        gr.Slider(label="Box Threshold", minimum=0, maximum=1, step=0.01, value=0.1),
+        gr.Checkbox(label="Enable Onnx Optimizations", value=True)
     ],
     outputs=["playable_video", gr.Number(label="milliseconds per frame", precision=2)],
     allow_flagging="never"
