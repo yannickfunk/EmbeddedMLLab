@@ -34,6 +34,7 @@ def get_video_frames(gr_video):
 def get_predictions_images(images, model_file, nms_threshold, box_threshold):
     ort_sess = ort.InferenceSession('data/'+model_file)
     prediction_images = []
+    person_only = model_file == "person_only.onnx"
     start = time.time_ns()
     for image in images:
         image = Image.fromarray(image)
@@ -43,8 +44,8 @@ def get_predictions_images(images, model_file, nms_threshold, box_threshold):
         onnx_predictions = ort_sess.run(None, {"input.1": image.numpy()})[0]
         prediction_images.append(
             plot_predictions(onnx_predictions, image,
-                             return_array=True,
-                             nms_threshold=nms_threshold, box_threshold=box_threshold)
+                             return_array=True, nms_threshold=nms_threshold,
+                             box_threshold=box_threshold, person_only=person_only)
         )
     end = time.time_ns()
     ms_per_frame = ((end - start) / len(images)) / 1000000
