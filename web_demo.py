@@ -11,6 +11,7 @@ from PIL import Image
 import PIL
 from models.tinyyolov2 import TinyYoloV2Original, TinyYoloV2PersonOnly
 import numpy as np
+from torch.quantization import fuse_modules
 
 import sys
 repo_path = sys.path[0]
@@ -55,7 +56,7 @@ def predict_torch(image, model):
         predictions = model(image)
     return predictions
 
-def get_predictions_images(images, model_file, nms_threshold, box_threshold, enable_opt):
+def get_predictions_images(images, model_file, nms_threshold, box_threshold, enable_opt, fuse):
     global last_model, last_opt, last_sess
     person_only = "person_only" in model_file
     use_onnx = ".onnx" in model_file
@@ -81,6 +82,12 @@ def get_predictions_images(images, model_file, nms_threshold, box_threshold, ena
         else:
             model = TinyYoloV2Original()
             model.load_pt_from_disk("data/voc_pretrained.pt", discard_last_layer=False)
+        model.eval()
+        if fuse:
+            modules = [name for name, _ in model.named_modules()][5:-1]
+            modules_to_fuse = [modules[i:i + 2] for i in range(0, len(modules), 2)]
+            fuse_modules(model, modules_to_fuse, inplace=True)
+            print(model)
         predict = lambda image, model: predict_torch(image, model)
 
 
@@ -123,10 +130,10 @@ def get_video_file_from_prediction_images(prediction_images, fps):
     return video_file.name
 
 
-def _predict(gr_video, model_file, nms_threshold, box_threshold, enable_opt):
+def _predict(gr_video, model_file, nms_threshold, box_threshold, enable_opt, fuse):
     images, fps = get_video_frames(gr_video)
     prediction_images, ms_per_frame = get_predictions_images(images, model_file,
-                                                             nms_threshold, box_threshold, enable_opt)
+                                                             nms_threshold, box_threshold, enable_opt, fuse)
     video_file = get_video_file_from_prediction_images(prediction_images, fps)
     return video_file, ms_per_frame
 
@@ -138,7 +145,8 @@ demo = gr.Interface(
         gr.Dropdown(choices=available_models, label="Model File", value="pretrained.onnx"),
         gr.Slider(label="NMS Threshold", minimum=0, maximum=1, step=0.01, value=0.25),
         gr.Slider(label="Box Threshold", minimum=0, maximum=1, step=0.01, value=0.1),
-        gr.Checkbox(label="Enable Onnx Optimizations", value=True)
+        gr.Checkbox(label="Enable Onnx Optimizations", value=True),
+        gr.Checkbox(label="Fuse Batchnorm with Conv Layers", value=False)
     ],
     outputs=["playable_video", gr.Number(label="FPS", precision=2)],
     allow_flagging="never"
