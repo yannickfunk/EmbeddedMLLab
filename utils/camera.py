@@ -86,8 +86,8 @@ class CameraDisplay:
             self.initialize_camera()
         else:
             self.camera = None
-        self.image_widget = ipywidgets.Image(format='jpeg')
-        self.image_widget.value = bgr8_to_jpeg(np.zeros((320, 320, 3), dtype=np.uint8))
+        self.image_widget = ipywidgets.Image(format='jpeg', width=1280, height=720)
+        self.image_widget.value = bgr8_to_jpeg(np.zeros((720, 1280, 3), dtype=np.uint8))
         display(self.image_widget)
         
         self._processing_frame = False
@@ -95,7 +95,7 @@ class CameraDisplay:
     
     def initialize_camera(self):
         print('Initializing camera...')
-        self.camera = Camera(width=640, height=360, capture_width=1280, capture_height=720, capture_fps=30)
+        self.camera = Camera(width=1280, height=720, capture_width=1280, capture_height=720, capture_fps=30)
         self.camera.observe(self._camera_callback, names='value')
     
     def release(self):

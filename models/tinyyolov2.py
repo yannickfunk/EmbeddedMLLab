@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import lightning as pl
+try:
+    import lightning as pl
+except:
+    import pytorch_lightning as pl
 
 from utils.loss import YoloLoss
 
